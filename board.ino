@@ -2,34 +2,70 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <MQ135.h>
-#include<string.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <string.h>
+#include <string>
+#include <sstream>
 
-byte buff[2];
-#define DSM501 18
-unsigned long duration;
-unsigned long starttime;
-unsigned long endtime;
-unsigned long sampletime_ms = 30000;
-unsigned long lowpulseoccupancy = 0;
-float ratio = 0;
-float concentration = 0;
-uint32_t delayMS = 5000;
+int delayMS = 3000;
+const char* ssid = "balls";
+const char* password = "prostu123";
+const char* boardId = "inischiedutohxinuohneduijhkx";
 
 #define DHTPIN 23
-#define DHTTYPE    DHT11     // DHT 11
+#define DHTTYPE DHT11     // DHT 11
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
 #define PIN_MQ135 4
 MQ135 mq135_sensor(PIN_MQ135);
 
+#define PIN_DSM 2
+
 void setup() {
   Serial.begin(9600);
   // Initialize device.
-  pinMode(DSM501,INPUT);
   pinMode(PIN_MQ135, INPUT_PULLUP);
-  starttime = millis(); 
+  pinMode(PIN_DSM, INPUT_PULLUP);
+
+  WiFi.begin(ssid, password);
+  while (!Serial || WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
+
   dht.begin();
+}
+
+void postData(float temp, float humidity, float ppm, float dust) {
+  const char * host = "http://172.20.10.3:3000/reading";
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(host);
+    http.addHeader("Content-Type", "application/json");
+    
+    std::stringstream ss;
+    ss << "{ \"id\": \"" << boardId << "\", \"temperature\": " << temp <<
+        ", \"humidity\": " << humidity << ", \"ppm\": " << ppm << 
+        ", \"dustConcentration\": " << dust << " }"; 
+
+    std::string body = ss.str();
+    Serial.println(body.c_str());
+    int httpCode = http.POST(body.c_str());
+    if (httpCode > 0) {
+      String payload = http.getString();
+      Serial.println(httpCode);
+      Serial.println(payload);
+    } else {
+      Serial.println("Error on HTTP request");
+    }
+
+    http.end();
+  } else {
+    Serial.println("Error in WiFi connection");
+  }
 }
 
 void loop() {
@@ -50,11 +86,6 @@ void loop() {
 
   auto temperature = temp.temperature;
   auto humidity = humid.relative_humidity;
-  double rzero = mq135_sensor.getRZero();
-  double correctedRZero = mq135_sensor.getCorrectedRZero(temperature, humidity);
-  double resistance = mq135_sensor.getResistance();
-  double ppm = mq135_sensor.getPPM();
-  double correctedPPM = mq135_sensor.getCorrectedPPM(temperature, humidity);
 
   Serial.print(F("Temperature: "));
   Serial.print(temperature);
@@ -64,32 +95,14 @@ void loop() {
   Serial.print(humidity);
   Serial.println(F("%"));
 
-  Serial.print("MQ135 RZero: ");
-  Serial.print(rzero);
-  Serial.print("\t Corrected RZero: ");
-  Serial.print(correctedRZero);
-  Serial.print("\t Resistance: ");
-  Serial.print(resistance);
-  Serial.print("\t PPM: ");
+  float ppm = analogRead(PIN_MQ135);
   Serial.print(ppm);
-  Serial.print("\t Corrected PPM: ");
-  Serial.print(correctedPPM);
-  Serial.println("ppm");
+  Serial.println( "ppm");
 
-  duration = pulseIn(DSM501, LOW);
-  lowpulseoccupancy += duration;
-  endtime = millis();
-  if ((endtime-starttime) > sampletime_ms)
-  {
-    ratio = (lowpulseoccupancy-endtime+starttime + sampletime_ms)/(sampletime_ms*10.0);  // Integer percentage 0=>100
-    concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62; // using spec sheet curve
-    Serial.print("lowpulseoccupancy:");
-    Serial.print(lowpulseoccupancy);
-    Serial.print("    ratio:");
-    Serial.print(ratio);
-    Serial.print("    DSM501A:");
-    Serial.println(concentration);
-    lowpulseoccupancy = 0;
-    starttime = millis();
-  } 
+  float dust = analogRead(PIN_DSM);
+  Serial.print(dust);
+  Serial.println(" dust");
+
+  postData(temperature, humidity, ppm, dust);
+  delay(100000);
 }
