@@ -40,7 +40,7 @@ void setup() {
 }
 
 void postData(float temp, float humidity, float ppm, float dust) {
-  const char * host = "http://172.20.10.3:3000/reading";
+  const char * host = "https://172.20.10.3:3000/reading";
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
     http.begin(host);
