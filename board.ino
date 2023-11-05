@@ -8,7 +8,7 @@
 #include <string>
 #include <sstream>
 
-int delayMS = 3000;
+int delayMS = 1000*60*60;
 const char* ssid = "balls";
 const char* password = "prostu123";
 const char* boardId = "inischiedutohxinuohneduijhkx";
